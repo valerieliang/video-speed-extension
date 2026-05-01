@@ -2,12 +2,11 @@
   "manifest_version": 3,
   "name": "Video Controller Pro",
   "version": "2.0.0",
-  "description": "Universal video controls: speed (any site), sponsor skip, PiP, sleep timer",
+  "description": "Universal video controls: speed (any site), sponsor skip, PiP",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
-    "alarms",
     "tabs"
   ],
   "host_permissions": [
