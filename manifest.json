@@ -26,49 +26,5 @@
       "run_at": "document_idle",
       "all_frames": true
     }
-  ],
-  "commands": {
-    "speed_up": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Up",
-        "mac": "Command+Shift+Up"
-      },
-      "description": "Increase playback speed by 0.25x"
-    },
-    "speed_down": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Down",
-        "mac": "Command+Shift+Down"
-      },
-      "description": "Decrease playback speed by 0.25x"
-    },
-    "reset_speed": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+0",
-        "mac": "Command+Shift+0"
-      },
-      "description": "Reset speed to 1.0x"
-    },
-    "skip_silence": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+S",
-        "mac": "Command+Shift+S"
-      },
-      "description": "Toggle silence/intro/outro skipping"
-    },
-    "toggle_pip": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+P",
-        "mac": "Command+Shift+P"
-      },
-      "description": "Toggle Picture-in-Picture"
-    },
-    "toggle_play_pause": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Space",
-        "mac": "Command+Shift+Space"
-      },
-      "description": "Play/Pause video"
-    }
-  }
+  ]
 }
