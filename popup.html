@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+
+    <header class="header">
+      <span class="logo">▶</span>
+      <h1>Video Controller Pro</h1>
+      <span id="videoStatus" class="badge badge--off">No video</span>
+    </header>
+
+    <!-- Speed -->
+    <section class="section">
+      <div class="section-title">Speed</div>
+      <div class="speed-row">
+        <button id="speedDown" class="btn btn-ghost" title="Slower">-</button>
+        <span id="currentSpeed" class="speed-display">1.00x</span>
+        <button id="speedUp" class="btn btn-ghost" title="Faster">+</button>
+        <button id="resetSpeed" class="btn btn-outline">Reset</button>
+      </div>
+      <input type="range" id="speedSlider" min="0.1" max="16" step="0.05" value="1">
+      <div class="speed-presets">
+        <button class="preset" data-speed="0.5">0.5x</button>
+        <button class="preset" data-speed="0.75">0.75x</button>
+        <button class="preset" data-speed="1">1x</button>
+        <button class="preset" data-speed="1.25">1.25x</button>
+        <button class="preset" data-speed="1.5">1.5x</button>
+        <button class="preset" data-speed="2">2x</button>
+        <button class="preset" data-speed="3">3x</button>
+        <button class="preset" data-speed="4">4x</button>
+      </div>
+    </section>
+
+    <!-- Skip -->
+    <section class="section">
+      <div class="section-title">Skip</div>
+      <div class="row gap-sm">
+        <button id="skipBack30"  class="btn btn-skip"><< 30s</button>
+        <button id="skipBack10"  class="btn btn-skip">< 10s</button>
+        <button id="skipForward10" class="btn btn-skip">10s ></button>
+        <button id="skipForward30" class="btn btn-skip">30s >></button>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="skipSilenceToggle">
+          <span class="toggle-text">Skip silence / intros / outros</span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="autoSkipSponsors">
+          <span class="toggle-text">Auto-skip sponsors (YouTube)</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- PiP only (Sleep timer removed) -->
+    <section class="section">
+      <div class="section-title">Picture-in-Picture</div>
+      <button id="togglePip" class="btn btn-primary w-full">Toggle PiP</button>
+      <p class="hint">Speed and controls persist in PiP mode</p>
+    </section>
+
+    <!-- Video info -->
+    <section class="section">
+      <div class="section-title">Current Video</div>
+      <div id="videoInfo" class="video-info">Scanning...</div>
+    </section>
+
+    <!-- Shortcuts -->
+    <section class="section section--flat">
+      <details>
+        <summary class="section-title shortcut-summary">Keyboard Shortcuts</summary>
+        <div class="shortcut-grid">
+          <span>Speed up</span><kbd>Ctrl+Shift+Up</kbd>
+          <span>Speed down</span><kbd>Ctrl+Shift+Down</kbd>
+          <span>Reset speed</span><kbd>Ctrl+Shift+0</kbd>
+          <span>Skip silence</span><kbd>Ctrl+Shift+S</kbd>
+          <span>Toggle PiP</span><kbd>Ctrl+Shift+P</kbd>
+          <span>Play / Pause</span><kbd>Ctrl+Shift+Space</kbd>
+        </div>
+      </details>
+    </section>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
