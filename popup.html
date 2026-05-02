@@ -3,26 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
+  <title>Video Controller Pro</title>
+  <style>
+    /* additional compact layout for merged skip+speed */
+    .skip-compact {
+      margin-top: 12px;
+      width: 100%;
+      border-top: 1px solid #252836;
+      padding-top: 12px;
+    }
+    .skip-compact .section-title {
+      margin-bottom: 8px;
+    }
+    .speed-presets {
+      margin-bottom: 0;
+    }
+    .row.gap-sm {
+      gap: 8px;
+    }
+    .btn-skip {
+      font-size: 11px;
+      padding: 5px 10px;
+    }
+    /* extra polish for centered consistency */
+    .speed-range-wrap {
+      margin-bottom: 4px;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
-
     <header class="header">
       <span class="logo">▶</span>
       <h1>Video Controller Pro</h1>
       <span id="videoStatus" class="badge badge--off">No video</span>
     </header>
 
-    <!-- Speed -->
+    <!-- Speed + Skip combined section -->
     <section class="section">
-      <div class="section-title">Speed</div>
+      <div class="section-title">⚡ Playback Speed</div>
       <div class="speed-row">
-        <button id="speedDown" class="btn btn-ghost" title="Slower">-</button>
+        <button id="speedDown" class="btn btn-ghost" title="Slower">−</button>
         <span id="currentSpeed" class="speed-display">1.00x</span>
         <button id="speedUp" class="btn btn-ghost" title="Faster">+</button>
-        <button id="resetSpeed" class="btn btn-outline">Reset</button>
       </div>
-      <input type="range" id="speedSlider" min="0.1" max="16" step="0.05" value="1">
+      <div class="speed-range-wrap">
+        <input type="range" id="speedSlider" min="0.1" max="16" step="0.05" value="1">
+      </div>
       <div class="speed-presets">
         <button class="preset" data-speed="0.5">0.5x</button>
         <button class="preset" data-speed="0.75">0.75x</button>
@@ -30,47 +57,435 @@
         <button class="preset" data-speed="1.25">1.25x</button>
         <button class="preset" data-speed="1.5">1.5x</button>
         <button class="preset" data-speed="2">2x</button>
-        <button class="preset" data-speed="3">3x</button>
         <button class="preset" data-speed="4">4x</button>
       </div>
-    </section>
 
-    <!-- Skip -->
-    <section class="section">
-      <div class="section-title">Skip</div>
-      <div class="row gap-sm">
-        <button id="skipBack30"  class="btn btn-skip"><< 30s</button>
-        <button id="skipBack10"  class="btn btn-skip">< 10s</button>
-        <button id="skipForward10" class="btn btn-skip">10s ></button>
-        <button id="skipForward30" class="btn btn-skip">30s >></button>
-      </div>
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="skipSilenceToggle">
-          <span class="toggle-text">Skip silence / intros / outros</span>
-        </label>
-      </div>
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="autoSkipSponsors">
-          <span class="toggle-text">Auto-skip sponsors (YouTube)</span>
-        </label>
+      <!-- Skip controls merged directly inside speed card -->
+      <div class="skip-compact">
+        <div class="section-title">⏩ Skip Controls</div>
+        <div class="row gap-sm">
+          <button id="skipBack30" class="btn btn-skip">« 30s</button>
+          <button id="skipBack10" class="btn btn-skip">‹ 10s</button>
+          <button id="skipForward10" class="btn btn-skip">10s ›</button>
+          <button id="skipForward30" class="btn btn-skip">30s »</button>
+        </div>
       </div>
     </section>
 
-    <!-- PiP only (Sleep timer removed) -->
+    <!-- PiP section (standalone) -->
     <section class="section">
-      <div class="section-title">Picture-in-Picture</div>
+      <div class="section-title">🖥️ Picture-in-Picture</div>
       <button id="togglePip" class="btn btn-primary w-full">Toggle PiP</button>
-      <p class="hint">Speed and controls persist in PiP mode</p>
+      <p class="hint">✨ Speed & controls persist in PiP mode</p>
     </section>
 
-    <!-- Video info -->
+    <!-- Video info section -->
     <section class="section">
-      <div class="section-title">Current Video</div>
-      <div id="videoInfo" class="video-info">Scanning...</div>
+      <div class="section-title">📺 Current Video</div>
+      <div id="videoInfo" class="video-info">Scanning for video...</div>
     </section>
   </div>
-  <script src="popup.js"></script>
+
+  <script>
+    (function() {
+      // ---------- DOM elements ----------
+      const speedSlider = document.getElementById('speedSlider');
+      const currentSpeedSpan = document.getElementById('currentSpeed');
+      const speedDown = document.getElementById('speedDown');
+      const speedUp = document.getElementById('speedUp');
+      const presetButtons = document.querySelectorAll('.preset');
+      const videoStatusSpan = document.getElementById('videoStatus');
+      const videoInfoDiv = document.getElementById('videoInfo');
+
+      // Skip buttons
+      const skipBack30 = document.getElementById('skipBack30');
+      const skipBack10 = document.getElementById('skipBack10');
+      const skipForward10 = document.getElementById('skipForward10');
+      const skipForward30 = document.getElementById('skipForward30');
+
+      // PiP button
+      const togglePipBtn = document.getElementById('togglePip');
+
+      // ---------- state ----------
+      let activeVideoElement = null;
+      let currentSpeedValue = 1.0;
+      let statusCheckInterval = null;
+
+      // Helper: get currently playing video on the page (supports YouTube, HTML5)
+      function findActiveVideo() {
+        const videos = document.querySelectorAll('video');
+        if (videos.length === 0) return null;
+        
+        // 1) prioritize any video that is currently playing or has duration >0 and not paused
+        for (let i = 0; i < videos.length; i++) {
+          const v = videos[i];
+          if ((v.currentTime > 0 && !v.paused) || (v.readyState >= 2 && !v.paused)) {
+            return v;
+          }
+        }
+        // 2) if none playing, pick the largest / most visible (often main video)
+        if (videos.length === 1) return videos[0];
+        // 3) fallback: first non-zero duration video
+        for (let v of videos) {
+          if (v.duration && v.duration > 0) return v;
+        }
+        return videos[0] || null;
+      }
+
+      // Update UI + badge and info text based on active video
+      function updateVideoUI() {
+        const video = findActiveVideo();
+        activeVideoElement = video;
+        
+        if (!video) {
+          videoStatusSpan.textContent = 'No video';
+          videoStatusSpan.className = 'badge badge--off';
+          videoInfoDiv.innerHTML = '📭 No video element detected on this page.';
+          return;
+        }
+        
+        // video exists → update status badge
+        videoStatusSpan.textContent = 'Video Ready';
+        videoStatusSpan.className = 'badge badge--on';
+        
+        // gather info: source hint, duration, time
+        let srcInfo = video.src || video.currentSrc;
+        let domainHint = '';
+        if (window.location?.hostname) {
+          if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) {
+            domainHint = '🎬 YouTube • ';
+          } else if (window.location.hostname.includes('vimeo.com')) {
+            domainHint = '🎥 Vimeo • ';
+          } else {
+            domainHint = `🌐 ${window.location.hostname.split('.').slice(-2, -1)[0] || 'video'} • `;
+          }
+        }
+        
+        const durationSec = video.duration && isFinite(video.duration) ? video.duration : 0;
+        const currentSec = video.currentTime || 0;
+        const formatTime = (sec) => {
+          if (!isFinite(sec) || sec <= 0) return '0:00';
+          const hrs = Math.floor(sec / 3600);
+          const mins = Math.floor((sec % 3600) / 60);
+          const secs = Math.floor(sec % 60);
+          if (hrs > 0) return `${hrs}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+          return `${mins}:${secs.toString().padStart(2,'0')}`;
+        };
+        
+        let durationDisplay = durationSec > 0 ? formatTime(durationSec) : 'live / unknown';
+        let currentDisplay = formatTime(currentSec);
+        videoInfoDiv.innerHTML = `<strong>${domainHint || '▶ '}</strong> ${currentDisplay} / ${durationDisplay}<br>
+        <span style="font-size: 10px; opacity:0.7;">${srcInfo ? srcInfo.substring(0, 50) : 'HTML5 video'}${srcInfo?.length > 50 ? '…' : ''}</span>`;
+      }
+
+      // Apply speed to active video (preserve PiP if needed)
+      function applySpeedToVideo(speed) {
+        if (activeVideoElement && activeVideoElement.playbackRate !== undefined) {
+          try {
+            activeVideoElement.playbackRate = speed;
+            currentSpeedValue = speed;
+          } catch(e) { console.warn(e); }
+        } else {
+          // try refetch video if null
+          const freshVideo = findActiveVideo();
+          if (freshVideo) {
+            activeVideoElement = freshVideo;
+            try {
+              freshVideo.playbackRate = speed;
+              currentSpeedValue = speed;
+            } catch(e) {}
+          }
+        }
+        // update UI slider/display regardless
+        if (currentSpeedSpan) currentSpeedSpan.textContent = speed.toFixed(2) + 'x';
+        if (speedSlider && !speedSlider.disabled) speedSlider.value = speed;
+        // sync preset active style
+        presetButtons.forEach(btn => {
+          const btnSpeed = parseFloat(btn.getAttribute('data-speed'));
+          if (Math.abs(btnSpeed - speed) < 0.01) btn.classList.add('active');
+          else btn.classList.remove('active');
+        });
+      }
+
+      // universal speed setter (smooth)
+      function setPlaybackSpeed(speed) {
+        if (speed < 0.1) speed = 0.1;
+        if (speed > 16) speed = 16;
+        currentSpeedValue = speed;
+        if (activeVideoElement) {
+          try {
+            activeVideoElement.playbackRate = speed;
+          } catch(e) { console.warn(e); }
+        } else {
+          // maybe video appears later, retry find
+          const video = findActiveVideo();
+          if (video) {
+            activeVideoElement = video;
+            try { video.playbackRate = speed; } catch(e) {}
+          }
+        }
+        currentSpeedSpan.textContent = speed.toFixed(2) + 'x';
+        speedSlider.value = speed;
+        // update preset active style
+        presetButtons.forEach(btn => {
+          const target = parseFloat(btn.getAttribute('data-speed'));
+          if (Math.abs(target - speed) < 0.01) btn.classList.add('active');
+          else btn.classList.remove('active');
+        });
+      }
+
+      // skip logic
+      function skipSeconds(seconds) {
+        if (!activeVideoElement) {
+          // try to get new active element
+          const video = findActiveVideo();
+          if (!video) {
+            videoInfoDiv.innerHTML = '⚠️ No active video to skip. Click on a video first.';
+            setTimeout(() => updateVideoUI(), 1200);
+            return;
+          }
+          activeVideoElement = video;
+        }
+        let newTime = activeVideoElement.currentTime + seconds;
+        if (newTime < 0) newTime = 0;
+        if (activeVideoElement.duration && isFinite(activeVideoElement.duration) && newTime > activeVideoElement.duration) {
+          newTime = activeVideoElement.duration;
+        }
+        activeVideoElement.currentTime = newTime;
+        // optional: quick feedback
+        videoInfoDiv.innerHTML = `<strong>⏩ Skipped ${seconds > 0 ? '+' : ''}${seconds}s</strong><br>${Math.floor(newTime)}s / ${Math.floor(activeVideoElement.duration || 0)}s`;
+        setTimeout(() => updateVideoUI(), 800);
+      }
+
+      // PiP logic
+      async function togglePictureInPicture() {
+        if (!activeVideoElement) {
+          const video = findActiveVideo();
+          if (!video) {
+            videoInfoDiv.innerHTML = '❌ No video found to enter Picture-in-Picture.';
+            setTimeout(() => updateVideoUI(), 1500);
+            return;
+          }
+          activeVideoElement = video;
+        }
+        try {
+          if (document.pictureInPictureElement === activeVideoElement) {
+            await document.exitPictureInPicture();
+            videoInfoDiv.innerHTML = '📌 Exited Picture-in-Picture.';
+            setTimeout(() => updateVideoUI(), 1000);
+          } else {
+            await activeVideoElement.requestPictureInPicture();
+            videoInfoDiv.innerHTML = '🖥️ PiP mode active — speed & skip persist.';
+            setTimeout(() => updateVideoUI(), 1200);
+          }
+        } catch (error) {
+          console.error('PiP error:', error);
+          videoInfoDiv.innerHTML = `⚠️ PiP failed: ${error.message.substring(0, 60)}`;
+          setTimeout(() => updateVideoUI(), 1500);
+        }
+      }
+
+      // sync active video speed when video changes (e.g., new page navigation)
+      function syncSpeedFromVideo() {
+        const vid = findActiveVideo();
+        if (vid && vid.playbackRate !== undefined && Math.abs(vid.playbackRate - currentSpeedValue) > 0.02) {
+          // respect video's current rate? But we want our controller to dominate: reapply stored speed
+          if (currentSpeedValue !== vid.playbackRate) {
+            try {
+              vid.playbackRate = currentSpeedValue;
+            } catch(e) {}
+          }
+          activeVideoElement = vid;
+          currentSpeedSpan.textContent = currentSpeedValue.toFixed(2) + 'x';
+          if (speedSlider) speedSlider.value = currentSpeedValue;
+        } else if (vid && !activeVideoElement) {
+          activeVideoElement = vid;
+          // ensure we apply our speed
+          try {
+            vid.playbackRate = currentSpeedValue;
+          } catch(e) {}
+        }
+        updateVideoUI();
+      }
+
+      // periodic update (detect if new video appears, or url changes)
+      function startPeriodicSync() {
+        if (statusCheckInterval) clearInterval(statusCheckInterval);
+        statusCheckInterval = setInterval(() => {
+          const freshVideo = findActiveVideo();
+          if (freshVideo !== activeVideoElement) {
+            activeVideoElement = freshVideo;
+            if (activeVideoElement && Math.abs(activeVideoElement.playbackRate - currentSpeedValue) > 0.05) {
+              try {
+                activeVideoElement.playbackRate = currentSpeedValue;
+              } catch(e) {}
+            }
+            updateVideoUI();
+          } else if (activeVideoElement && activeVideoElement.playbackRate !== currentSpeedValue) {
+            // re-apply if some external script changed rate
+            try {
+              activeVideoElement.playbackRate = currentSpeedValue;
+            } catch(e) {}
+          }
+          // update info periodically (time change)
+          if (activeVideoElement && videoInfoDiv && !videoInfoDiv.innerHTML.includes('Skipped') && !videoInfoDiv.innerHTML.includes('PiP')) {
+            const vid = activeVideoElement;
+            const cur = vid.currentTime || 0;
+            const dur = vid.duration && isFinite(vid.duration) ? vid.duration : 0;
+            const formatTimeShort = (sec) => {
+              if (!isFinite(sec) || sec <= 0) return '0:00';
+              const mins = Math.floor(sec / 60);
+              const secs = Math.floor(sec % 60);
+              if (mins >= 60) {
+                const hrs = Math.floor(mins / 60);
+                const remainMins = mins % 60;
+                return `${hrs}:${remainMins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+              }
+              return `${mins}:${secs.toString().padStart(2,'0')}`;
+            };
+            let srcShort = '';
+            if (vid.src || vid.currentSrc) {
+              const raw = (vid.src || vid.currentSrc);
+              srcShort = raw.length > 45 ? raw.substring(0, 42)+'…' : raw;
+            }
+            videoInfoDiv.innerHTML = `<strong>🎬 ${window.location.hostname.includes('youtube') ? 'YouTube' : 'Video'}</strong> ${formatTimeShort(cur)} / ${dur > 0 ? formatTimeShort(dur) : 'live'} <span style="font-size:9px; opacity:0.6;">${srcShort}</span>`;
+          }
+        }, 700);
+      }
+
+      // event listeners for speed and skip
+      function bindEvents() {
+        speedDown.addEventListener('click', () => {
+          let newSpeed = currentSpeedValue - 0.1;
+          if (newSpeed < 0.1) newSpeed = 0.1;
+          setPlaybackSpeed(newSpeed);
+        });
+        speedUp.addEventListener('click', () => {
+          let newSpeed = currentSpeedValue + 0.1;
+          if (newSpeed > 16) newSpeed = 16;
+          setPlaybackSpeed(newSpeed);
+        });
+        speedSlider.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value);
+          setPlaybackSpeed(val);
+        });
+        presetButtons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const speedVal = parseFloat(btn.getAttribute('data-speed'));
+            setPlaybackSpeed(speedVal);
+          });
+        });
+        skipBack30.addEventListener('click', () => skipSeconds(-30));
+        skipBack10.addEventListener('click', () => skipSeconds(-10));
+        skipForward10.addEventListener('click', () => skipSeconds(10));
+        skipForward30.addEventListener('click', () => skipSeconds(30));
+        togglePipBtn.addEventListener('click', togglePictureInPicture);
+      }
+
+      // initial load + observe for mutations (SPA support, YouTube navigation)
+      function observePageForVideo() {
+        // detect when new video injected (YouTube dynamically)
+        const observer = new MutationObserver(() => {
+          const newVideo = findActiveVideo();
+          if (newVideo && newVideo !== activeVideoElement) {
+            activeVideoElement = newVideo;
+            try {
+              newVideo.playbackRate = currentSpeedValue;
+            } catch(e) {}
+            updateVideoUI();
+          } else if (!newVideo && activeVideoElement) {
+            // video might have disappeared
+            activeVideoElement = null;
+            updateVideoUI();
+          } else if (newVideo && activeVideoElement === newVideo) {
+            // ensure speed remains applied
+            if (newVideo.playbackRate !== currentSpeedValue) {
+              try { newVideo.playbackRate = currentSpeedValue; } catch(e) {}
+            }
+            updateVideoUI();
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+        // also watch for URL change (simple pushState)
+        let lastUrl = location.href;
+        new MutationObserver(() => {
+          const url = location.href;
+          if (url !== lastUrl) {
+            lastUrl = url;
+            setTimeout(() => {
+              activeVideoElement = null;
+              const vid = findActiveVideo();
+              if (vid) {
+                activeVideoElement = vid;
+                try { vid.playbackRate = currentSpeedValue; } catch(e) {}
+              }
+              updateVideoUI();
+            }, 400);
+          }
+        }).observe(document, { subtree: true, childList: true, attributes: true });
+      }
+
+      // keyboard shortcuts : add optional (extra polish)
+      function setupGlobalShortcuts() {
+        window.addEventListener('keydown', (e) => {
+          // avoid interfering with input fields
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          // only if target not editable
+          const key = e.key;
+          if (key === '+' || key === '=') {
+            e.preventDefault();
+            let ns = currentSpeedValue + 0.1;
+            if (ns > 16) ns = 16;
+            setPlaybackSpeed(ns);
+          } else if (key === '-' || key === '_') {
+            e.preventDefault();
+            let ns = currentSpeedValue - 0.1;
+            if (ns < 0.1) ns = 0.1;
+            setPlaybackSpeed(ns);
+          } else if (key === 'ArrowLeft' && e.shiftKey) {
+            e.preventDefault();
+            skipSeconds(-10);
+          } else if (key === 'ArrowRight' && e.shiftKey) {
+            e.preventDefault();
+            skipSeconds(10);
+          } else if (key === 'ArrowLeft' && e.ctrlKey) {
+            e.preventDefault();
+            skipSeconds(-30);
+          } else if (key === 'ArrowRight' && e.ctrlKey) {
+            e.preventDefault();
+            skipSeconds(30);
+          } else if (key === 'p' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            togglePictureInPicture();
+          }
+        });
+      }
+
+      // Inject hint for extra user feedback: show small info in console? not needed
+      function init() {
+        bindEvents();
+        startPeriodicSync();
+        observePageForVideo();
+        setupGlobalShortcuts();
+        // initial video detection after a tiny delay (DOM ready)
+        setTimeout(() => {
+          const initialVideo = findActiveVideo();
+          if (initialVideo) {
+            activeVideoElement = initialVideo;
+            try {
+              initialVideo.playbackRate = currentSpeedValue;
+            } catch(e) {}
+            updateVideoUI();
+          } else {
+            updateVideoUI();
+          }
+          // additionally try to sync speed from saved default (1.0)
+          setPlaybackSpeed(1.0);
+        }, 200);
+      }
+
+      init();
+    })();
+  </script>
 </body>
 </html>

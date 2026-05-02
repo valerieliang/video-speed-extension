@@ -3,6 +3,11 @@
   "name": "Video Controller Pro",
   "version": "2.0.0",
   "description": "Universal video controls: speed (any site), sponsor skip, PiP",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "activeTab",
     "storage",
@@ -17,7 +22,12 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Video Controller Pro"
+    "default_title": "Video Controller Pro",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "content_scripts": [
     {
