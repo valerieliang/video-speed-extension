@@ -123,8 +123,6 @@ const VC = (() => {
   }
 
   // PiP
-  // When entering PiP, speed + play state are already bound to the same
-  // HTMLVideoElement, so nothing extra is needed. We just sync on leave.
   function handlePiPEnter() {
     showHUD('Picture-in-Picture');
   }
@@ -145,7 +143,6 @@ const VC = (() => {
           return;
         }
         await video.requestPictureInPicture();
-        // Speed is preserved automatically -- same element
       }
     } catch (e) {
       console.warn('PiP error:', e);
@@ -178,7 +175,6 @@ const VC = (() => {
   }
 
   // HUD overlay
-  // Renders a brief toast over the video itself (not the whole page)
   function showHUD(text) {
     ensureStyles();
 
@@ -242,7 +238,7 @@ const VC = (() => {
       lastUrl = location.href;
       sponsorSegments = [];
       video = null;
-      setTimeout(scan, 800); // Give the page a moment to render new content
+      setTimeout(scan, 800);
     }
   }
 
@@ -292,35 +288,44 @@ const VC = (() => {
       showHUD(`SponsorBlock ${autoSkipSponsors ? 'ON' : 'OFF'}`);
     },
 
-    get_state: (_, sendResponse) => {
-      sendResponse({
-        speed: desiredSpeed,
-        isPlaying: video ? !video.paused : false,
-        currentTime: video?.currentTime ?? 0,
-        duration: video?.duration ?? 0,
-        pip: document.pictureInPictureElement === video,
-        hasVideo: !!video,
-        silenceSkip: silenceSkipEnabled,
-        sponsorBlock: autoSkipSponsors
-      });
-    }
+    // BUG FIX: get_state was calling sendResponse via a separate param but
+    // the message listener below was also calling sendResponse({ success: true })
+    // afterwards, causing a double-response error. Handler now returns the data
+    // object and the listener handles calling sendResponse once.
+    get_state: () => ({
+      speed: desiredSpeed,
+      isPlaying: video ? !video.paused : false,
+      currentTime: video?.currentTime ?? 0,
+      duration: video?.duration ?? 0,
+      pip: document.pictureInPictureElement === video,
+      hasVideo: !!video,
+      silenceSkip: silenceSkipEnabled,
+      sponsorBlock: autoSkipSponsors
+    })
   };
 
   // Message listener
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const handler = handlers[msg.action];
-    if (handler) {
-      handler(msg, sendResponse);
-      if (msg.action !== 'get_state') sendResponse({ success: true });
-    } else {
+    if (!handler) {
       sendResponse({ error: 'unknown command' });
+      return false;
     }
-    return true;
+
+    const result = handler(msg);
+
+    if (msg.action === 'get_state') {
+      // get_state returns a plain object synchronously
+      sendResponse(result);
+    } else {
+      sendResponse({ success: true });
+    }
+
+    return false; // No async needed; all handlers are synchronous
   });
 
   // Init
   async function init() {
-    // Restore saved speed and toggle states
     const saved = await chrome.storage.local.get(['savedSpeed', 'autoSkipSponsors', 'silenceSkip']);
     if (saved.savedSpeed && saved.savedSpeed !== 1.0) {
       desiredSpeed = saved.savedSpeed;

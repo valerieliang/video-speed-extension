@@ -1,6 +1,5 @@
 // popup.js
 // Popup controller -- Video Controller Pro
-// Sleep timer functionality completely removed
 
 let currentTabId = null;
 
@@ -9,22 +8,45 @@ document.addEventListener('DOMContentLoaded', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTabId = tab?.id ?? null;
 
-  await loadSettings();
-  refreshVideoInfo();
+  if (!currentTabId) {
+    console.error('No active tab found');
+    updateUIForError();
+    return;
+  }
 
+  await loadSettings();
+  
+  // Initial refresh
+  await refreshVideoInfo();
+  
   setupListeners();
 
   // Keep video info live
   setInterval(refreshVideoInfo, 2000);
 });
 
+function updateUIForError() {
+  const infoEl = document.getElementById('videoInfo');
+  const statusEl = document.getElementById('videoStatus');
+  if (infoEl) infoEl.textContent = 'Unable to access current tab';
+  if (statusEl) {
+    statusEl.textContent = 'Error';
+    statusEl.className = 'badge badge--off';
+  }
+}
+
 // Event wiring
 function setupListeners() {
   // Speed
-  $('speedUp').addEventListener('click',   () => adjustSpeed(+0.25));
-  $('speedDown').addEventListener('click', () => adjustSpeed(-0.25));
-  $('resetSpeed').addEventListener('click',() => setSpeed(1.0));
-  $('speedSlider').addEventListener('input', e => setSpeed(+e.target.value));
+  const speedUp = document.getElementById('speedUp');
+  const speedDown = document.getElementById('speedDown');
+  const resetSpeed = document.getElementById('resetSpeed');
+  const speedSlider = document.getElementById('speedSlider');
+  
+  if (speedUp) speedUp.addEventListener('click', () => adjustSpeed(+0.25));
+  if (speedDown) speedDown.addEventListener('click', () => adjustSpeed(-0.25));
+  if (resetSpeed) resetSpeed.addEventListener('click', () => setSpeed(1.0));
+  if (speedSlider) speedSlider.addEventListener('input', e => setSpeed(+e.target.value));
 
   // Presets
   document.querySelectorAll('.preset').forEach(btn => {
@@ -32,120 +54,204 @@ function setupListeners() {
   });
 
   // Skip
-  $('skipBack30').addEventListener('click',    () => sendCmd('skip_time', { seconds: -30 }));
-  $('skipBack10').addEventListener('click',    () => sendCmd('skip_time', { seconds: -10 }));
-  $('skipForward10').addEventListener('click', () => sendCmd('skip_time', { seconds:  10 }));
-  $('skipForward30').addEventListener('click', () => sendCmd('skip_time', { seconds:  30 }));
+  const skipBack30 = document.getElementById('skipBack30');
+  const skipBack10 = document.getElementById('skipBack10');
+  const skipForward10 = document.getElementById('skipForward10');
+  const skipForward30 = document.getElementById('skipForward30');
+  
+  if (skipBack30) skipBack30.addEventListener('click', () => sendCommand('skip_time', { seconds: -30 }));
+  if (skipBack10) skipBack10.addEventListener('click', () => sendCommand('skip_time', { seconds: -10 }));
+  if (skipForward10) skipForward10.addEventListener('click', () => sendCommand('skip_time', { seconds: 10 }));
+  if (skipForward30) skipForward30.addEventListener('click', () => sendCommand('skip_time', { seconds: 30 }));
 
   // Toggles
-  $('skipSilenceToggle').addEventListener('change', e => {
-    chrome.storage.local.set({ silenceSkip: e.target.checked });
-    sendCmd('skip_silence');
-  });
+  const skipSilenceToggle = document.getElementById('skipSilenceToggle');
+  const autoSkipSponsors = document.getElementById('autoSkipSponsors');
+  
+  if (skipSilenceToggle) {
+    skipSilenceToggle.addEventListener('change', async e => {
+      await chrome.storage.local.set({ silenceSkip: e.target.checked });
+      await sendCommand('skip_silence');
+    });
+  }
 
-  $('autoSkipSponsors').addEventListener('change', e => {
-    chrome.storage.local.set({ autoSkipSponsors: e.target.checked });
-    sendCmd('toggle_sponsor_block', { enabled: e.target.checked });
-  });
+  if (autoSkipSponsors) {
+    autoSkipSponsors.addEventListener('change', async e => {
+      await chrome.storage.local.set({ autoSkipSponsors: e.target.checked });
+      await sendCommand('toggle_sponsor_block', { enabled: e.target.checked });
+    });
+  }
 
   // PiP
-  $('togglePip').addEventListener('click', () => sendCmd('toggle_pip'));
+  const togglePip = document.getElementById('togglePip');
+  if (togglePip) togglePip.addEventListener('click', () => sendCommand('toggle_pip'));
 }
 
 // Speed helpers
 function adjustSpeed(delta) {
-  const current = parseFloat($('currentSpeed').textContent);
+  const currentSpeedSpan = document.getElementById('currentSpeed');
+  if (!currentSpeedSpan) return;
+  const current = parseFloat(currentSpeedSpan.textContent);
   setSpeed(Math.max(0.1, Math.min(16, +(current + delta).toFixed(2))));
 }
 
-function setSpeed(speed) {
+async function setSpeed(speed) {
   speed = Math.max(0.1, Math.min(16, +speed.toFixed(2)));
-  $('currentSpeed').textContent = speed.toFixed(2) + 'x';
-  $('speedSlider').value = speed;
+  const currentSpeedSpan = document.getElementById('currentSpeed');
+  const speedSlider = document.getElementById('speedSlider');
+  
+  if (currentSpeedSpan) currentSpeedSpan.textContent = speed.toFixed(2) + 'x';
+  if (speedSlider) speedSlider.value = speed;
 
   // Highlight active preset
   document.querySelectorAll('.preset').forEach(btn => {
-    btn.classList.toggle('active', +btn.dataset.speed === speed);
+    const btnSpeed = parseFloat(btn.dataset.speed);
+    btn.classList.toggle('active', Math.abs(btnSpeed - speed) < 0.01);
   });
 
-  sendCmd('set_speed', { speed });
-  chrome.storage.local.set({ savedSpeed: speed });
+  await sendCommand('set_speed', { speed });
+  await chrome.storage.local.set({ savedSpeed: speed });
+}
+
+// Send command to content script
+async function sendCommand(action, extra = {}) {
+  if (!currentTabId) {
+    console.error('No tab ID available');
+    return false;
+  }
+  
+  try {
+    const response = await chrome.tabs.sendMessage(currentTabId, { action, ...extra });
+    console.log(`Command ${action} sent successfully`, response);
+    return true;
+  } catch (error) {
+    console.error(`Failed to send command ${action}:`, error);
+    
+    // Try to inject content script if not present
+    if (error.message.includes('Could not establish connection') || error.message.includes('Receiving end does not exist')) {
+      console.log('Content script not responding, trying to inject...');
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTabId },
+          files: ['content.js']
+        });
+        // Wait a bit for injection to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const response = await chrome.tabs.sendMessage(currentTabId, { action, ...extra });
+        return true;
+      } catch (injectError) {
+        console.error('Failed to inject content script:', injectError);
+      }
+    }
+    return false;
+  }
 }
 
 // Video info
 async function refreshVideoInfo() {
-  let info = null;
+  if (!currentTabId) return;
+  
   try {
-    info = await chrome.runtime.sendMessage({ action: 'getVideoInfo', tabId: currentTabId });
-  } catch (_) {}
+    // Get state from content script
+    const response = await chrome.tabs.sendMessage(currentTabId, { action: 'get_state' });
+    
+    const infoEl = document.getElementById('videoInfo');
+    const statusEl = document.getElementById('videoStatus');
+    const currentSpeedSpan = document.getElementById('currentSpeed');
+    const speedSlider = document.getElementById('speedSlider');
 
-  const infoEl  = $('videoInfo');
-  const statusEl = $('videoStatus');
+    if (response && response.hasVideo) {
+      const state = response.isPlaying ? 'Playing' : 'Paused';
+      const time = `${formatTime(response.currentTime)} / ${formatTime(response.duration)}`;
+      const pip = response.pip ? ' · <strong>PiP active</strong>' : '';
 
-  if (info?.currentTime !== undefined) {
-    const state  = info.isPlaying ? 'Playing' : 'Paused';
-    const time   = `${fmt(info.currentTime)} / ${fmt(info.duration)}`;
-    const res    = info.videoWidth ? `${info.videoWidth}x${info.videoHeight}` : '';
-    const pip    = info.pip ? ' · <strong>PiP active</strong>' : '';
+      if (infoEl) {
+        infoEl.innerHTML = `
+          <strong>${state}</strong> · ${time}<br>
+          Speed: <strong>${response.speed?.toFixed(2)}x</strong>${pip}
+        `;
+      }
+      
+      if (statusEl) {
+        statusEl.textContent = 'Video Ready';
+        statusEl.className = 'badge badge--on';
+      }
 
-    infoEl.innerHTML =
-      `<strong>${state}</strong> · ${time}<br>` +
-      `Speed: <strong>${info.currentSpeed?.toFixed(2)}x</strong>` +
-      (res ? ` · ${res}` : '') + pip;
-
-    statusEl.textContent = 'Live';
-    statusEl.className   = 'badge badge--on';
-
-    // Sync speed display (in case a keyboard shortcut changed it)
-    const spd = +(info.currentSpeed?.toFixed(2));
-    if (spd && Math.abs(spd - parseFloat($('currentSpeed').textContent)) > 0.02) {
-      $('currentSpeed').textContent = spd.toFixed(2) + 'x';
-      $('speedSlider').value = spd;
+      // Sync speed display
+      if (response.speed && currentSpeedSpan && speedSlider) {
+        const currentSpeed = parseFloat(currentSpeedSpan.textContent);
+        if (Math.abs(response.speed - currentSpeed) > 0.02) {
+          currentSpeedSpan.textContent = response.speed.toFixed(2) + 'x';
+          speedSlider.value = response.speed;
+          
+          // Update preset highlighting
+          document.querySelectorAll('.preset').forEach(btn => {
+            const btnSpeed = parseFloat(btn.dataset.speed);
+            btn.classList.toggle('active', Math.abs(btnSpeed - response.speed) < 0.01);
+          });
+        }
+      }
+    } else if (infoEl) {
+      infoEl.textContent = 'No video detected on this page';
+      if (statusEl) {
+        statusEl.textContent = 'No video';
+        statusEl.className = 'badge badge--off';
+      }
     }
-  } else {
-    infoEl.textContent   = 'No video detected on this page';
-    statusEl.textContent = 'No video';
-    statusEl.className   = 'badge badge--off';
+  } catch (error) {
+    console.error('Failed to refresh video info:', error);
+    const infoEl = document.getElementById('videoInfo');
+    const statusEl = document.getElementById('videoStatus');
+    if (infoEl) infoEl.textContent = 'Unable to connect to video controller. Try refreshing the page.';
+    if (statusEl) {
+      statusEl.textContent = 'Error';
+      statusEl.className = 'badge badge--off';
+    }
   }
 }
 
 // Settings persistence
 async function loadSettings() {
-  const s = await chrome.storage.local.get(['savedSpeed', 'autoSkipSponsors', 'silenceSkip']);
+  const saved = await chrome.storage.local.get(['savedSpeed', 'autoSkipSponsors', 'silenceSkip']);
 
-  if (s.savedSpeed) setSpeed(s.savedSpeed);
-
-  if (s.autoSkipSponsors) {
-    $('autoSkipSponsors').checked = true;
-    sendCmd('toggle_sponsor_block', { enabled: true });
+  if (saved.savedSpeed && saved.savedSpeed !== 1.0) {
+    const currentSpeedSpan = document.getElementById('currentSpeed');
+    const speedSlider = document.getElementById('speedSlider');
+    if (currentSpeedSpan) currentSpeedSpan.textContent = saved.savedSpeed.toFixed(2) + 'x';
+    if (speedSlider) speedSlider.value = saved.savedSpeed;
+    
+    // Highlight active preset
+    document.querySelectorAll('.preset').forEach(btn => {
+      const btnSpeed = parseFloat(btn.dataset.speed);
+      btn.classList.toggle('active', Math.abs(btnSpeed - saved.savedSpeed) < 0.01);
+    });
   }
 
-  if (s.silenceSkip) {
-    $('skipSilenceToggle').checked = true;
-    // Content script restores its own silenceSkipEnabled from storage on init
+  const autoSkipSponsors = document.getElementById('autoSkipSponsors');
+  const skipSilenceToggle = document.getElementById('skipSilenceToggle');
+  
+  if (autoSkipSponsors && saved.autoSkipSponsors) {
+    autoSkipSponsors.checked = true;
+  }
+
+  if (skipSilenceToggle && saved.silenceSkip) {
+    skipSilenceToggle.checked = true;
   }
 }
 
-// Messaging
-async function sendCmd(action, extra = {}) {
-  if (!currentTabId) return;
-  try {
-    await chrome.tabs.sendMessage(currentTabId, { action, ...extra });
-  } catch (e) {
-    console.warn('[popup] sendCmd failed:', action, e.message);
+// Helper functions
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds) || seconds === Infinity) return '0:00';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours}:${pad(minutes)}:${pad(secs)}`;
   }
+  return `${minutes}:${pad(secs)}`;
 }
 
-// Tiny helpers
-const $ = id => document.getElementById(id);
-
-function fmt(sec) {
-  if (!sec || isNaN(sec)) return '0:00';
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
-  return `${m}:${pad(s)}`;
+function pad(n) {
+  return String(n).padStart(2, '0');
 }
-
-function pad(n) { return String(n).padStart(2, '0'); }
