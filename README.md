@@ -28,20 +28,6 @@ Universal video control extension for Chrome. Works on any site with HTML5 video
 - **Skip buttons** – Jump ±10s or ±30s
 - **Toggle PiP** – Enter/exit picture-in-picture
 
-### Keyboard shortcuts
-
-| Action | Default |
-|--------|---------|
-| Speed up | `Shift + ↑` |
-| Speed down | `Shift + ↓` |
-| Reset speed | `Shift + R` |
-| Skip forward 10s | `Shift + →` |
-| Skip back 10s | `Shift + ←` |
-| Toggle PiP | `Shift + P` |
-| Toggle play/pause | `Shift + Space` |
-
-*Shortcuts can be customized at `chrome://extensions/shortcuts`*
-
 ## Notes
 
 - Some sites (Netflix, YouTube) may fight speed changes – the extension automatically re-applies your speed
