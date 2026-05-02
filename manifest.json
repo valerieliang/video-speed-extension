@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Video Controller Pro",
+  "name": "Video Speed Controller",
   "version": "2.0.0",
   "description": "Universal video controls: speed (any site), sponsor skip, PiP",
   "icons": {
@@ -22,7 +22,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Video Controller Pro",
+    "default_title": "Video Speed Controller",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
