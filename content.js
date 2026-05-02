@@ -14,14 +14,22 @@ const VC = (() => {
   let rateChangeGuard = false;   // Prevents re-entrancy when we set playbackRate
 
   // Video discovery
+  function collectVideos(root) {
+    const found = Array.from(root.querySelectorAll('video'));
+    root.querySelectorAll('*').forEach(el => {
+      if (el.shadowRoot) found.push(...collectVideos(el.shadowRoot));
+    });
+    return found;
+  }
+
   function findBestVideo() {
-    const videos = Array.from(document.querySelectorAll('video'));
+    const videos = collectVideos(document);
     if (!videos.length) return null;
 
     // Prefer: playing > largest > first
     return (
       videos.find(v => !v.paused && v.readyState >= 3) ||
-      videos.sort((a, b) =>
+      [...videos].sort((a, b) =>
         (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight)
       )[0]
     );
@@ -237,8 +245,19 @@ const VC = (() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       sponsorSegments = [];
-      video = null;
-      setTimeout(scan, 800);
+
+      // Clear video reference if it's no longer connected, unless reused (e.g., YouTube).
+      if (video && !video.isConnected) {
+        detachListeners(video);
+        video = null;
+      }
+
+      // Fetch sponsor segments for the new URL.
+      fetchSponsorSegments();
+
+      // Schedule progressive scan attempts; the new <video> may appear at
+      // different points depending on the site's rendering pipeline.
+      [200, 600, 1200].forEach(delay => setTimeout(scan, delay));
     }
   }
 

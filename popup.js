@@ -62,21 +62,67 @@ async function setSpeed(speed) {
 
 async function sendCommand(action, extra = {}) {
   try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
+      console.warn('Invalid tab URL:', tab?.url);
+      return;
+    }
     await chrome.tabs.sendMessage(currentTabId, { action, ...extra });
-  } catch (error) {
-    console.error(`Failed to send command ${action}:`, error);
+  } catch {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: currentTabId },
+        files: ['content.js']
+      });
+      await chrome.tabs.sendMessage(currentTabId, { action, ...extra });
+    } catch (retryError) {
+      console.warn(`Failed to send command ${action} even after injection:`, retryError);
+    }
   }
 }
 
 async function refreshVideoInfo() {
   if (!currentTabId) return;
 
+  const infoEl = document.getElementById('videoInfo');
+  const statusEl = document.getElementById('videoStatus');
+  const currentSpeedSpan = document.getElementById('currentSpeed');
+  const speedSlider = document.getElementById('speedSlider');
+
   try {
-    const response = await chrome.tabs.sendMessage(currentTabId, { action: 'get_state' });
-    const infoEl = document.getElementById('videoInfo');
-    const statusEl = document.getElementById('videoStatus');
-    const currentSpeedSpan = document.getElementById('currentSpeed');
-    const speedSlider = document.getElementById('speedSlider');
+    // Query every frame directly instead of relying on tabs.sendMessage, which
+    // only captures the first frame to respond (often the top frame with no video).
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: currentTabId, allFrames: true },
+      func: () => {
+        function collectVideos(root) {
+          const found = Array.from(root.querySelectorAll('video'));
+          root.querySelectorAll('*').forEach(el => {
+            if (el.shadowRoot) found.push(...collectVideos(el.shadowRoot));
+          });
+          return found;
+        }
+
+        const videos = collectVideos(document);
+        if (!videos.length) return null;
+
+        const video =
+          videos.find(v => !v.paused && v.readyState >= 3) ||
+          [...videos].sort((a, b) => (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight))[0];
+
+        if (!video) return null;
+        return {
+          hasVideo: true,
+          isPlaying: !video.paused,
+          currentTime: video.currentTime,
+          duration: video.duration,
+          speed: video.playbackRate,
+          pip: document.pictureInPictureElement === video
+        };
+      }
+    });
+
+    const response = results?.map(r => r.result).find(Boolean) ?? null;
 
     if (response?.hasVideo) {
       const state = response.isPlaying ? 'Playing' : 'Paused';
@@ -101,8 +147,7 @@ async function refreshVideoInfo() {
       statusEl.className = 'badge badge--off';
     }
   } catch {
-    document.getElementById('videoInfo').textContent = 'Unable to connect. Try refreshing the page.';
-    const statusEl = document.getElementById('videoStatus');
+    infoEl.textContent = 'Unable to connect. Try refreshing the page.';
     statusEl.textContent = 'Error';
     statusEl.className = 'badge badge--off';
   }
