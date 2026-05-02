@@ -32,19 +32,19 @@
 
       <div class="speed-presets">
         <button class="preset" data-speed="0.5">0.5×</button>
-        <button class="preset" data-speed="0.75">0.75×</button>
+        <!-- <button class="preset" data-speed="0.75">0.75×</button> -->
         <button class="preset active" data-speed="1">1×</button>
-        <button class="preset" data-speed="1.25">1.25×</button>
+        <!-- <button class="preset" data-speed="1.25">1.25×</button> -->
         <button class="preset" data-speed="1.5">1.5×</button>
-        <button class="preset" data-speed="1.75">1.75×</button>
+        <!-- <button class="preset" data-speed="1.75">1.75×</button> -->
         <button class="preset" data-speed="2">2×</button>
         <button class="preset" data-speed="2.5">2.5×</button>
         <button class="preset" data-speed="3">3×</button>
       </div>
 
-      <div class="row" style="margin-top: 10px;">
+      <!-- <div class="row" style="margin-top: 10px;">
         <button id="resetSpeed" class="btn btn-outline">Reset to 1×</button>
-      </div>
+      </div> -->
     </div>
 
     <!-- Skip Controls -->
@@ -58,36 +58,17 @@
       </div>
     </div>
 
-    <!-- Toggles -->
-    <div class="section">
-      <span class="section-title">Features</span>
-
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="skipSilenceToggle" />
-          <span class="toggle-text">Skip Silence / Intros</span>
-        </label>
-      </div>
-
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="autoSkipSponsors" />
-          <span class="toggle-text">SponsorBlock</span>
-          <span class="badge badge--yt">YT</span>
-        </label>
-      </div>
-
-      <div class="toggle-row" style="margin-top: 10px;">
-        <button id="togglePip" class="btn btn-outline w-full">
-          📺 Toggle Picture-in-Picture
-        </button>
-      </div>
     </div>
 
     <!-- Video Info -->
     <div class="section">
       <span class="section-title">Now Playing</span>
       <div id="videoInfo" class="video-info">No video detected on this page</div>
+      <div class="toggle-row" style="margin-top: 10px;">
+        <button id="togglePip" class="btn btn-outline w-full">
+          📺 Toggle Picture-in-Picture
+        </button>
+      </div>
     </div>
 
   </div>
