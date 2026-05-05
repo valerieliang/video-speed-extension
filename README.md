@@ -5,10 +5,7 @@ Universal video control extension for Chrome. Works on any site with HTML5 video
 ## Features
 
 - **Speed control** – 0.1× to 16×, persists across tabs
-- **Keyboard shortcuts** – See popup for full list
 - **Picture-in-Picture** – Detachable video player
-- **SponsorBlock integration** – Auto-skips sponsors, intros, outros on YouTube
-- **Silence skip** – Jumps over intro/outro dead zones (configurable)
 - **Video info** – Current speed, time, play/pause status
 
 ## Installation
